@@ -1,0 +1,173 @@
+---
+title: "Machine Learning  Report"
+author: "Tiago Marques"
+date: "28 de Junho de 2016"
+output: html_document
+---
+
+
+## Synopsis
+
+The present report takes the Weight Lifting Exercise Dataset available in (<http://groupware.les.inf.puc-rio.br/har>), which measures through different sensors how well some participants execute an exercise.
+This dataset classifies the exercise in 5 different classes, of which the class "A" represents a well executed exercise and the remain ones "B", "C" "D" and "E" are related to different forms of bad execution.
+In the following sections will be explained the necessary steps to build the model and find the predictions.
+
+## Data Load
+
+The training data for this project are available here:
+
+<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv>
+
+The test data are available here:
+
+<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv>
+
+```{r}
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv","./data/pml-training.csv", mode="wb")
+```
+
+```{r}
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv","./data/pml-testing.csv", mode="wb")
+```
+
+The data is loaded converting some invalid results to NA.
+```{r}
+#Data Loading
+training <- read.csv("./data/pml-training.csv", na.strings=c("", "NA", "#DIV/0!"))
+testing <- read.csv("./data/pml-testing.csv", na.strings=c("", "NA", "#DIV/0!"))
+```
+
+To execute the following steps were loaded these libraries
+
+```{r}
+library(caret)
+library(rpart)
+```
+
+
+## Data Preparation
+
+### Data Cleaning
+
+The features with more than 50% of empty values are discarded.
+```{r}
+#Select variables with more than 50% of complete values
+training2 <- training
+training3 <- as.data.frame(lapply(training2, function(x)sum(is.na(x ))/length(x)))
+training2 <- training2[,which(colMeans(training3)<0.5)]
+```
+
+The resulting data set doesn't have any NA
+```{r}
+sum(complete.cases(training2)== FALSE)
+```
+
+### Pre-Processing
+
+In order to avoid skewness and high variance, which are factors that interfere with some models, the data is scaled and centered in zero.
+```{r}
+preObj <- preProcess(training2, method = c("center", "scale"))
+training1 <- predict(preObj, training2)
+```
+
+
+### Data Particion
+
+
+It is defined that 60% of the data is used to train the model and 40% is used to test.
+```{r}
+#Create data partition
+trainingC <- data.frame(training1)
+inTrain <- createDataPartition(y = trainingC$classe, p = 0.6, list = FALSE )
+train <- trainingC[inTrain,]
+test <- trainingC[-inTrain,]
+
+```
+
+
+## Model Selection
+
+It was used the following seed.
+
+```{r}
+set.seed(1904)
+```
+
+### Features selection
+
+From the 160 initial features remained 60 for selection.
+```{r}
+dim(train)
+```
+
+From these features were discarded the ones more highly correlated with each other, decreasing the redundant effect. 
+All the features with a correlation higher than 0.75 were discarded
+
+```{r}
+# calculate correlation matrix
+trainingC1 <- train[,-c(1:6,60)]
+correlationMatrix <- cor(trainingC1)
+highlyCorrelated <- findCorrelation(correlationMatrix, cutoff=0.75)
+tc2 <- trainingC1[,-highlyCorrelated]
+str(tc2)
+tc3 <- data.frame(train[,5:6],tc2, classe = train[,60])
+```
+
+### Model selection 
+
+Since the present data set contains numeric and factor variables, they were chosen two models:
+
+* Support Vector Machine
+* Random Forest
+
+## Results
+
+### Model training
+
+It was applied a Cross-validation with 10 folds em 3 repetitions.
+
+```{r}
+cv.ctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 3, 
+                        classProbs = TRUE)
+```
+
+
+In the next step both models (SVM and Random Forest) will be trained.
+
+Support Vector Machine:
+```{r svm, cache= TRUE}
+model_svm <- train(classe ~ ., method = "svmRadial", trControl = cv.ctrl, data = tc3, verbose = FALSE)
+```
+
+Random Forest:
+```{r rf, cache= TRUE}
+model_rf <- train(classe ~ ., method = "rf", trControl = cv.ctrl, data = tc3)
+```
+
+
+### Model results
+
+In the next step will be compared the results of both methods (SVM and Random Forest), to decide which one achieves a better performance.
+In order to get a more real behavior, it is used a new data sample (test).
+
+Support Vector Machine results:
+
+```{r}
+res <- predict(model_svm, test)
+confusionMatrix(res,test$classe)
+```
+
+
+Random Forest results:
+
+```{r}
+res <- predict(model_rf, test)
+confusionMatrix(res,test$classe)
+```
+
+With almost 100% percent of accuracy (out of sample error = 6e-04), the random forest model performs considerable better than SVM, which just achieves 82% of accuracy and demonstrates some issues specially in class C sensitivity.
+The 
+
+
+
+
